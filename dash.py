@@ -6,11 +6,12 @@ from time import sleep
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from secret import USERNAME, PASSWORD, SERVER_ID, HEADERS
+from secret import USERNAME, PASSWORD, SERVER_ID, HEADERS, PATH
 import json
 import requests
 
-PATH = "C:\Program Files (x86)\chromedriver.exe"
+
+
 
 class TownshipLogger():
     def __init__(self):
@@ -18,9 +19,11 @@ class TownshipLogger():
         options = webdriver.ChromeOptions()
         options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
+        # put the PATH of your chromedriver here
         self.driver = webdriver.Chrome(PATH, options = options)        
         self.player_list = []
         
+    # pings server to see if there are any active players
     def ping_server(self):
         
         url = "https://967phuchye.execute-api.ap-southeast-2.amazonaws.com/prod/api/servers/2004963217"
@@ -78,12 +81,21 @@ class TownshipLogger():
 
     def write_to_csv(self, data, params, file):
         
-        if('.csv' not in file[-4]):
+        if('.csv' not in file[-4:]):
+            print("Not a csv file...")
             return
         
         with open(file, 'r') as f:
             
             headers = next(f)
+            
+            headers = headers.split(',')
+            
+            for i, header in enumerate(headers):
+                
+                if header != params[i]:
+                    print("improper parameter ordering.. expected: {}".format(headers))
+                    
             
 
 
