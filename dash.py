@@ -1,23 +1,25 @@
+from math import e
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
-
-from credentials import USERNAME, PASSWORD
-
-from bs4 import BeautifulSoup
-
-import requests
-
 from time import sleep
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+from secret import USERNAME, PASSWORD, SERVER_ID
+
+import json
 
 PATH = "C:\Program Files (x86)\chromedriver.exe"
 
 options = webdriver.ChromeOptions()
 options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
+
 driver = webdriver.Chrome(PATH, options = options)
 
-driver.get("https://dash.townshiptale.com/")
+driver.get("http://dash.townshiptale.com")
+
 
 search = driver.find_element(By.ID, "username")
 search.send_keys(USERNAME)
@@ -28,28 +30,31 @@ search.send_keys(Keys.ENTER)
 
 sleep(5)
 
+driver.get("http://dash.townshiptale.com/servers/{}".format(SERVER_ID))
 
+sleep(5)
 
-player_detail = "curl \"https://967phuchye.execute-api.ap-southeast-2.amazonaws.com/prod/api/servers/2004963217?limit=20\" ^-H \"authority: 967phuchye.execute-api.ap-southeast-2.amazonaws.com\" ^-H \"sec-ch-ua: ^\\^\" Not A;Brand^\\^\";v=^\\^\"99^\\^\", ^\\^\"Chromium^\\^\";v=^\\^\"98^\\^\", ^\\^\"Google Chrome^\\^\";v=^\\^\"98^\\^\"\" ^-H \"authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVc2VySWQiOiIxMzkyMjAxMDI4IiwiVXNlcm5hbWUiOiJtYXR0aGV3ZG8iLCJyb2xlIjoiQWNjZXNzIiwiaXNfdmVyaWZpZWQiOiJ0cnVlIiwiUG9saWN5IjpbImdhbWVfYWNjZXNzX3B1YmxpYyIsInNlcnZlcl9hY2Nlc3NfdHV0b3JpYWwiLCJzZXJ2ZXJfYWNjZXNzX29jdWx1c19vdmVyd29ybGQiLCJzZXJ2ZXJfYWNjZXNzX29jdWx1c190dXRvcmlhbCJdLCJleHAiOjE2NDY0NDg2ODcsImlzcyI6IkFsdGFXZWJBUEkiLCJhdWQiOiJBbHRhQ2xpZW50In0.djSUKmIvDBsQy-iuDKObdQc2AhLu295P1jSjsDSbMnc\" ^-H \"content-type: application/json\" ^-H \"sec-ch-ua-mobile: ?0\" ^-H \"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36\" ^-H \"x-api-key: 2l6aQGoNes8EHb94qMhqQ5m2iaiOM9666oDTPORf\" ^-H \"sec-ch-ua-platform: ^\\^\"Windows^\\^\"\" ^-H \"accept: */*\" ^-H \"origin: http://dash.townshiptale.com\" ^-H \"sec-fetch-site: cross-site\" ^-H \"sec-fetch-mode: cors\" ^-H \"sec-fetch-dest: empty\" ^-H \"referer: http://dash.townshiptale.com/\" ^-H \"accept-language: en-US,en;q=0.9\" ^--compressed"
+#print(driver.current_url,'--------------------------')
+#print(driver.page_source)
 
-response = requests.request("GET", player_detail)
+while True:
+    sleep(3)
+    search = driver.find_element(By.XPATH, '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/form/div/div/input')
+    
+    player_name = "a player's name"
 
-print(response.text)
-
-
-print(driver.page_source)
-
-#response = requests.get("https://dash.townshiptale.com/servers/2004963217")
-
-#print("-----------------------")
-
-# soup = BeautifulSoup(
-#     response.text,
-#     'html.parser'
-# )
-
-# print(response.text)
-
-
-while(True):
-    pass
+    search.send_keys("player detailed {}".format(player_name))
+    search.send_keys(Keys.ENTER)
+ 
+    sleep(3)
+    
+    #print(driver.page_source)
+    
+    search = driver.find_element(By.XPATH, '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/p')
+    
+    print(search.text)
+    
+    
+    player_json = json.loads(search.text)
+    
+    print("player {} is at chunk {}.".format(player_json['username'], player_json['Chunk']))
