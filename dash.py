@@ -333,6 +333,8 @@ def main():
                 # print("date and time =", dt_string)
 
                 
+                # Index,Time,Username,Bag,Location
+                # Index,Time,Username,Item,Location
                 
 
 if __name__ == "__main__":
