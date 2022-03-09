@@ -1,4 +1,3 @@
-from math import e
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -15,6 +14,8 @@ import json
 import pandas as pd
 import re
 
+import os
+
 class Quit:
     
     
@@ -22,11 +23,12 @@ class Quit:
         '''
         init - initiates the web driver
         '''
+    
+        options = webdriver.ChromeOptions()
+        options.add_experimental_option('excludeSwitches', ['enable-logging'])
         
         PATH = "C:\Program Files (x86)\chromedriver.exe"
 
-        options = webdriver.ChromeOptions()
-        options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
         self.driver = webdriver.Chrome(PATH, options = options)
 
@@ -181,21 +183,27 @@ class Quit:
 
 def main():
     
+
+    
     seconds = 0
     
     bot = Quit()
     
     bot.auth()
+    
+    login_attempt_count = 0
+
 
     
     while(True):
         response = bot.get_num_players()
         
+        
         if(response and '0' not in response):
             
             bot.send_command("player list")
             
-
+            login_attempt_count = 0
                         
             data = bot.get_player_list_data()
             now = datetime.now()
@@ -210,7 +218,7 @@ def main():
 
                     print(i, ": ", player['username'])
                     
-                    bot.send_command("player inventory {}".format(player['username']))
+                    bot.send_command('player inventory \"{}\"'.format(player['username']))
                     
                     
                     data = bot.get_data('//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/li')
@@ -220,6 +228,7 @@ def main():
                     
                     if data:
                         
+                        bag = 'None'
                         
                         for i in data['All']:
                             
@@ -236,6 +245,13 @@ def main():
                             result = re.sub(r"\d+", "", item_name)
                             #print("final: ", result)
 
+                            if 'HoarderBag' in result:
+                                bag = 'HoarderBag'
+                            elif 'WoodenBag' in result:
+                                bag = 'WoodenBag'
+                            elif result == 'Bag':
+                                bag = 'Bag'
+
                             
                             player_items.append(result)
                     
@@ -250,6 +266,7 @@ def main():
                         
                         if location_data:
                             location_data = location_data['Chunk']
+                            location_data = location_data.strip('(Alta.Chunks.LocationChunk)')
                         else:
                             location_data = "None"
                             
@@ -260,21 +277,50 @@ def main():
                             'Location': location_data
                         }
                         
+                        df_dict_bag_only = {
+                            'Time': [current_time],
+                            'Username': [player['username']],
+                            'Bag': [bag],
+                            'Location': [location_data]
+                        }
+                        
+                        
                         #print("player items: ", player_items)
                         
                         df = pd.DataFrame(df_dict)
+                        df_bag = pd.DataFrame(df_dict_bag_only)
                         
-                        df.to_csv('item_locations.csv', mode = 'a', header = False)
+                        df.to_csv('3.7.22.csv', mode = 'a', header = False)
+                        df_bag.to_csv('3.7.22_bag_location.csv', mode = 'a', header = False)
+                        
                         print("wrote to item_locations.csv")
                         
                             
                         # line 381
                     
-                
+  
         # tab this if it doesn't work later
-        print("checking login", seconds)
-        bot.check_login()
+        #print("checking login", seconds)
+        login_status = bot.check_login()
+        
+        if(login_status == 0):
+            login_attempt_count += 1
             
+        
+        if(login_attempt_count > 10):
+            datetime_now = datetime.now()
+            currtime = datetime_now.strftime("%m/%d/%Y %H:%M:%S")
+            
+            print("White screen! Reauthorizing at {}.....".format(currtime))
+            
+            bot.driver.close()
+            
+            sleep(3)
+            
+            bot = Quit()
+
+            bot.auth()
+        
 
             #
                 # datetime object containing current date and time
@@ -290,5 +336,7 @@ def main():
                 
 
 if __name__ == "__main__":
+    
+    print(os.getcwd())
     
     main()
