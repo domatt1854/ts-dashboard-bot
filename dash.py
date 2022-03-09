@@ -313,7 +313,7 @@ def main():
             
             print("White screen! Reauthorizing at {}.....".format(currtime))
             
-            bot.driver.close()
+            bot.driver.close()          
             
             sleep(3)
             
