@@ -5,16 +5,19 @@ from time import sleep
 from datetime import datetime
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
-from secret import USERNAME, PASSWORD, SERVER_ID
+from secret import USERNAME, PASSWORD, SERVER_ID, S3_SECRET, S3_ACCESS_KEY
 
 import json
 
 import pandas as pd
 import re
 
-import os
+from os.path import exists
+
+import boto3
+
 
 class Quit:
     
@@ -27,10 +30,17 @@ class Quit:
         options = webdriver.ChromeOptions()
         options.add_experimental_option('excludeSwitches', ['enable-logging'])
         
+        # change the PATH to where the chromedriver executable is stored
         PATH = "C:\Program Files (x86)\chromedriver.exe"
 
 
         self.driver = webdriver.Chrome(PATH, options = options)
+
+        self.s3_client = boto3.client(
+                's3',
+                aws_access_key_id = S3_ACCESS_KEY,
+                aws_secret_access_key = S3_SECRET
+            )
 
     def get(self, url, delay = 0):
         '''
@@ -69,8 +79,13 @@ class Quit:
             self.driver.get("http://dash.townshiptale.com/servers/{}".format(SERVER_ID))
             
         except TimeoutException:
-            self.driver.refresh()
-            self.auth()
+
+            # close and launch a new instance if auth failed
+
+            self.driver.close()          
+            sleep(3)
+            self.__init__()
+
 
 
 
@@ -86,9 +101,11 @@ class Quit:
                 EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/form/div/div/input'))
             )
             
+            # clear the command runner and send the command
             self.command_runner.clear()
             self.command_runner.send_keys(command)
             self.command_runner.send_keys(Keys.ENTER)
+
             print("successfully sent command \'{}\'".format(command))
             sleep(3)
             
@@ -97,6 +114,11 @@ class Quit:
         except TimeoutException:
             self.auth()
     
+    """
+    This grabs the data outputted by certain commands. 
+        xpath - the specific path to the data
+    """
+
     def get_data(self, xpath):
         
         
@@ -116,40 +138,92 @@ class Quit:
         except json.JSONDecodeError:
             return None
     
+    
     def get_player_list_data(self):
         
         player_list = []
+
+        try:
+            # xpath is different when there is only one player,
+            # it has no list number
+
+            # no way of checking which case it is without refreshing the page
+            # and checking how many players are active. 
+            
+            xpath = '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/li'
+
+
+            player_data = WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.XPATH, xpath))
+            )
+                
+            player_list.append(json.loads(player_data.text))
         
-        for i in range(1, 9):
-        
-            xpath = '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/li[{}]'.format(i)
-        
-            try:
-                player_data = WebDriverWait(self.driver, 10).until(
+        except Exception:
+            pass
+
+        try:
+            
+            for i in range(1, 9):
+            
+                xpath = '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/li[{}]'.format(i)
+            
+                
+                player_data = WebDriverWait(self.driver, 5).until(
                             EC.presence_of_element_located((By.XPATH, xpath))
                 )
                 
                 player_list.append(json.loads(player_data.text))
-            
-            except TimeoutException:
-                return player_list
+                    
+        except TimeoutException:
+            print("timeout exception on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+
+        except json.JSONDecodeError:
+            print("json decode error on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+
+        except StaleElementReferenceException:
+            print("stale element exception on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+
     
         return player_list
         
 
+    """
+    get_num_players() uses the "X elements" text in the dashboard to grab how many players there are.
+    This is an alternative to using the command runner because the command runner requires at least one player to be 
+    in the server to be enabled.
+
+    The main caveat is that this text will not be constantly updated. Users will have to use the 'player list' command 
+    to see who is currently active on the server.
+
+    """
     def get_num_players(self):
         
         try:
             xpath = '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[3]/div/div[1]/h3'
             
-            search = self.driver.find_element(By.XPATH, xpath)
-            
+
+            search = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, xpath))
+            )
+
+
             result = search.text
             
-            return result
+            return int(result[0])
+
+
         except NoSuchElementException:
             return None
+        except TimeoutException:
+            return None
+        except StaleElementReferenceException:
+            return None
         
+    """
+    checks if usual username and password entries are available, if they are not, return 0
+    else, log in as usual
+    """
     def check_login(self):
         
         try:
@@ -169,8 +243,6 @@ class Quit:
             
             self.driver.get("http://dash.townshiptale.com/servers/{}".format(SERVER_ID))
             
-
-            
             print("logged in")
             
         except TimeoutException:
@@ -179,44 +251,66 @@ class Quit:
     def refresh(self):
         self.driver.refresh()
         
-            
+
+def upload_to_s3(df_items: pd.DataFrame, df_location: pd.DataFrame) -> None:
+    pass
+
 
 def main():
     
-
-    
-    seconds = 0
-    
+    # initialize the webdriver and login
     bot = Quit()
-    
     bot.auth()
     
+    # to track if the script is actually interacting with the command runner
+    # I might want to replace this later with a simple URL check.
     login_attempt_count = 0
 
+    # two ways of getting number of players, from the "X online" on the dashboard website
+    # itself, or running 'player list' as a command. 
 
-    
+    # get_num_players() uses the 'X online' method, which only works after we immediately
+    # refresh the page, else it will return an innaccurate value. 
+    num_players = bot.get_num_players()
+
+    print("Number players online: {}".format(num_players))
+
+    # infinite for loop of logging.    
     while(True):
-        response = bot.get_num_players()
+
+        # reset if we aren't on the correct page (the server page)
+        if bot.driver.current_url != "http://dash.townshiptale.com/servers/{}".format(SERVER_ID):
+            bot.auth()
+            num_players = bot.get_num_players()
+
         
-        
-        if(response and '0' not in response):
+        # if we are able to get the number of players online
+        # and there are some players in the server
+        if(num_players and num_players != 0):
             
+            # get the ID's and usernames of all players currently on the server
             bot.send_command("player list")
             
-            login_attempt_count = 0
-                        
-            data = bot.get_player_list_data()
+            player_list = bot.get_player_list_data()
+            num_players = len(player_list)
+
+            # get current time to mark item and player data
             now = datetime.now()
             
             
-            if(data):
-                for i, player in enumerate(data):
+            if(num_players != 0):
+
+                # reset our interaction counter because the 
+                login_attempt_count = 0
+
+                for i, player in enumerate(player_list):
 
 
                     current_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                    current_day = now.strftime("%m.%d.%Y")
 
 
-                    print(i, ": ", player['username'])
+                    print(i, ": ", player['username'], "at", current_time)
                     
                     bot.send_command('player inventory \"{}\"'.format(player['username']))
                     
@@ -289,56 +383,77 @@ def main():
                         
                         df = pd.DataFrame(df_dict)
                         df_bag = pd.DataFrame(df_dict_bag_only)
-                        
-                        df.to_csv('3.7.22.csv', mode = 'a', header = False)
-                        df_bag.to_csv('3.7.22_bag_location.csv', mode = 'a', header = False)
-                        
-                        print("wrote to item_locations.csv")
-                        
+
+             
+                        # create new files with headers
+                        # if they do not exist yet
+
+                        item_location_filename = 'data/{}_items.csv'.format(current_day)
+                        location_filename = 'data/{}_bag_location.csv'.format(current_day)
+
+                        if not exists(item_location_filename):
+                            with open(item_location_filename, 'w') as f:
+                                f.write("Index,Time,Username,Item,Location\n")
                             
-                        # line 381
-                    
-  
-        # tab this if it doesn't work later
-        #print("checking login", seconds)
-        login_status = bot.check_login()
-        
-        if(login_status == 0):
-            login_attempt_count += 1
-            
-        
-        if(login_attempt_count > 10):
-            datetime_now = datetime.now()
-            currtime = datetime_now.strftime("%m/%d/%Y %H:%M:%S")
-            
-            print("White screen! Reauthorizing at {}.....".format(currtime))
-            
-            bot.driver.close()          
-            
-            sleep(3)
-            
-            bot = Quit()
+                        if not exists(location_filename):
+                            with open(location_filename, 'w') as f:
+                                f.write('Index,Time,Username,Bag,Location\n')
+                      
+                        
+                        
+                        df.to_csv(item_location_filename, mode = 'a', header = False)
+                        print("wrote to {}".format(item_location_filename))
 
-            bot.auth()
-        
+                        df_bag.to_csv(location_filename, mode = 'a', header = False)
+                        print("wrote to {}".format(location_filename))
 
-            #
-                # datetime object containing current date and time
-                # now = datetime.now()
+
+                        
+
+        # in the case where we are on the correct website
+        # but there are no active players
+        elif num_players and '0' in num_players:
+            sleep(60)
+            bot.refresh()
+
+            num_players = bot.get_num_players()
+
+
+        # not on the correct page, auto-logged out, else
+        else:
+            # tab this if it doesn't work later
+
+
+            login_status = bot.check_login()
+            
+            if(login_status == 0):
+                login_attempt_count += 1
+            
+                print("failed login check, current login attempt count: {}".format(login_attempt_count))
+            
+            if(login_attempt_count > 2):
+                datetime_now = datetime.now()
+                currtime = datetime_now.strftime("%m/%d/%Y %H:%M:%S")
                 
-                # print("now =", now)
-
-                # # dd/mm/YY H:M:S
-                # dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-                # print("date and time =", dt_string)
-
+                print("White screen! Reauthorizing at {}.....".format(currtime))
                 
-                # Index,Time,Username,Bag,Location
-                # Index,Time,Username,Item,Location
+                bot.driver.close()          
+                
+                sleep(3)
+                
+                bot = Quit()
+
+                bot.auth()
+
+                num_players = bot.get_num_players()
+
+                login_attempt_count = 0
+
+            
+    
                 
 
 if __name__ == "__main__":
-    
-    print(os.getcwd())
+
     
     main()
