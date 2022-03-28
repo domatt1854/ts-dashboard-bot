@@ -7,7 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
-from secret import USERNAME, PASSWORD, SERVER_ID, S3_SECRET, S3_ACCESS_KEY
+from secret import USERNAME, PASSWORD, SERVER_ID
 
 import json
 
@@ -16,7 +16,7 @@ import re
 
 from os.path import exists
 
-import boto3
+
 
 
 class Quit:
@@ -36,11 +36,6 @@ class Quit:
 
         self.driver = webdriver.Chrome(PATH, options = options)
 
-        self.s3_client = boto3.client(
-                's3',
-                aws_access_key_id = S3_ACCESS_KEY,
-                aws_secret_access_key = S3_SECRET
-            )
 
     def get(self, url, delay = 0):
         '''
@@ -176,13 +171,13 @@ class Quit:
                 player_list.append(json.loads(player_data.text))
                     
         except TimeoutException:
-            print("timeout exception on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+            print("timeout exception on get_player_list_data at: {}".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
 
         except json.JSONDecodeError:
-            print("json decode error on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+            print("json decode error on get_player_list_data at: {}".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
 
         except StaleElementReferenceException:
-            print("stale element exception on get_player_list_data at: ".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+            print("stale element exception on get_player_list_data at: {}".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
 
     
         return player_list
@@ -252,8 +247,6 @@ class Quit:
         self.driver.refresh()
         
 
-def upload_to_s3(df_items: pd.DataFrame, df_location: pd.DataFrame) -> None:
-    pass
 
 
 def main():
@@ -412,8 +405,11 @@ def main():
 
         # in the case where we are on the correct website
         # but there are no active players
-        elif num_players and '0' in num_players:
+        
+        elif num_players is not None and num_players == 0:
+            
             sleep(60)
+            print("sleeping for a minute at {}".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
             bot.refresh()
 
             num_players = bot.get_num_players()
@@ -423,7 +419,10 @@ def main():
         else:
             # tab this if it doesn't work later
 
-
+            print(num_players is not None)
+            print(num_players == 0)
+            print(num_players)
+            
             login_status = bot.check_login()
             
             if(login_status == 0):
