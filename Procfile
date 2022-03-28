@@ -1,1 +1,1 @@
-web: python dash.py
+web: python app.py
