@@ -15,7 +15,7 @@ import pandas as pd
 import re
 
 from os.path import exists
-
+from os import environ
 
 
 
@@ -28,23 +28,30 @@ class Quit:
         '''
     
         options = webdriver.ChromeOptions()
-        options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        
+        #options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        
+        options.binary_location = environ.get("GOOGLE_CHROME_BIN")
+        options.add_argument("--headless")
+        options.add_argument("-no-sandbox")
+        options.add_argument("--disable-dev-sh-usage")
         
         # change the PATH to where the chromedriver executable is stored
-        PATH = "C:\Program Files (x86)\chromedriver.exe"
 
 
-        self.driver = webdriver.Chrome(PATH, options = options)
+
+        self.driver = webdriver.Chrome(
+                executable_path = environ.get("CHROMEDRIVER_PATH"),
+                options = options
+            )
 
 
-    def get(self, url, delay = 0):
+    def get(self, url):
         '''
         wrapper to navigate to a page and sleep if provided
         '''
         self.driver.get(url)
-        
-        if delay != 0:
-            sleep(delay)
+
             
 
     def auth(self):
@@ -408,8 +415,9 @@ def main():
         
         elif num_players is not None and num_players == 0:
             
-            sleep(60)
             print("sleeping for a minute at {}".format(datetime.now().strftime("%m/%d/%Y %H:%M:%S")))
+            sleep(60)
+        
             bot.refresh()
 
             num_players = bot.get_num_players()
