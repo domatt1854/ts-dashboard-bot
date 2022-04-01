@@ -7,7 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
-from secret import USERNAME, PASSWORD, SERVER_ID
+from secret import USERNAME, PASSWORD, SERVER_ID, DISCORD_AUTH, CHANNEL_ID
 
 import json
 
@@ -15,8 +15,8 @@ import pandas as pd
 import re
 
 from os.path import exists
-from os import environ
 
+import requests
 
 
 class Quit:
@@ -29,21 +29,22 @@ class Quit:
     
         options = webdriver.ChromeOptions()
         
-        #options.add_experimental_option('excludeSwitches', ['enable-logging'])
         
-        options.binary_location = environ.get("GOOGLE_CHROME_BIN")
-        options.add_argument("--headless")
-        options.add_argument("-no-sandbox")
-        options.add_argument("--disable-dev-sh-usage")
+        options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        
+        
+
         
         # change the PATH to where the chromedriver executable is stored
+        PATH = "C:\Program Files (x86)\chromedriver.exe"
+        
+        self.driver = webdriver.Chrome(PATH, options = options, )
 
 
-
-        self.driver = webdriver.Chrome(
-                executable_path = environ.get("CHROMEDRIVER_PATH"),
-                options = options
-            )
+        # self.driver = webdriver.Chrome(
+        #         executable_path = environ.get("CHROMEDRIVER_PATH"),
+        #         options = options
+        #     )
 
 
     def get(self, url):
@@ -160,10 +161,11 @@ class Quit:
             )
                 
             player_list.append(json.loads(player_data.text))
+            
+
         
         except Exception:
             pass
-
         try:
             
             for i in range(1, 9):
@@ -253,7 +255,17 @@ class Quit:
     def refresh(self):
         self.driver.refresh()
         
+        
+def send_message_to_discord(message):
+    payload = {
+        'content': message
+    }
 
+    header = {
+        'authorization': DISCORD_AUTH
+    }
+
+    r = requests.post(CHANNEL_ID, data = payload, headers = header)
 
 
 def main():
@@ -292,7 +304,11 @@ def main():
             bot.send_command("player list")
             
             player_list = bot.get_player_list_data()
+            
             num_players = len(player_list)
+            
+            if num_players >= 2 and player_list[0] == player_list[1]:
+                player_list.pop(0)
 
             # get current time to mark item and player data
             now = datetime.now()
@@ -302,17 +318,33 @@ def main():
 
                 # reset our interaction counter because the 
                 login_attempt_count = 0
+                
+                current_time = now.strftime("%m/%d/%Y %H:%M:%S")
+                current_day = now.strftime("%m.%d.%Y")
+
+                
+                to_discord_message = ""
+                to_discord_message += current_time + "\n\n"
+                    
+
 
                 for i, player in enumerate(player_list):
 
-
-                    current_time = now.strftime("%m/%d/%Y %H:%M:%S")
-                    current_day = now.strftime("%m.%d.%Y")
-
-
+                    if 'username' not in player.keys():
+                        continue
+                    
+                    
                     print(i, ": ", player['username'], "at", current_time)
                     
+                    to_discord_message += player['username']
+                    
+                    
+                    if(player['username'] == 'bayusechees'):
+                        bot.send_command('player set-stat bayusechees damage 15')
+                        bot.send_command('player set-stat bayusechees speed 15')
+                    
                     bot.send_command('player inventory \"{}\"'.format(player['username']))
+                    
                     
                     
                     data = bot.get_data('//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/li')
@@ -331,13 +363,9 @@ def main():
                             
                             
                             item_name = item.replace('(Clone)', '')
-                            #print("after strip clonse", item_name)
                             item_name = item_name.replace('-' , '')
-                           # print(item_name)
                             item_name = item_name.replace(' ', '')
-                            #print(item_name)
                             result = re.sub(r"\d+", "", item_name)
-                            #print("final: ", result)
 
                             if 'HoarderBag' in result:
                                 bag = 'HoarderBag'
@@ -348,10 +376,7 @@ def main():
 
                             
                             player_items.append(result)
-                    
-                    
-                            #print(result)
-                        
+                                            
                         location_xpath = '//*[@id="root"]/div/div/div[2]/div/div/div[2]/div[2]/div/div[2]/code/p'
                         
                         bot.send_command("player detailed {}".format(player['username']))
@@ -378,16 +403,13 @@ def main():
                             'Location': [location_data]
                         }
                         
-                        
-                        #print("player items: ", player_items)
-                        
+                                                
                         df = pd.DataFrame(df_dict)
                         df_bag = pd.DataFrame(df_dict_bag_only)
 
              
                         # create new files with headers
                         # if they do not exist yet
-
                         item_location_filename = 'data/{}_items.csv'.format(current_day)
                         location_filename = 'data/{}_bag_location.csv'.format(current_day)
 
@@ -406,8 +428,17 @@ def main():
 
                         df_bag.to_csv(location_filename, mode = 'a', header = False)
                         print("wrote to {}".format(location_filename))
+                        
+                        
+                        to_discord_message += ": " + bag
+                        
+                        to_discord_message += ": " + location_data + "\n"
+                        
 
+                        
 
+                to_discord_message += "------------------------------------------------------------------------------\n"
+                send_message_to_discord(to_discord_message)
                         
 
         # in the case where we are on the correct website
